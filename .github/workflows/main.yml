@@ -1,0 +1,22 @@
+name: Ekstrak manvoy.zip
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  unzip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ekstrak dan Push
+        run: |
+          unzip -o manvoy.zip
+          rm manvoy.zip
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add .
+          git commit -m "Ekstrak manvoy.zip"
+          git push
+          
