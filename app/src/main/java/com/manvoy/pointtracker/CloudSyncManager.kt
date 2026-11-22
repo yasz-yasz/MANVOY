@@ -301,7 +301,6 @@ object CloudSyncManager {
             val syncKey = config.syncKey.trim().ifBlank { "pribadi" }
             val endpoint = buildEndpoint(config.workerUrl, "/sync", syncKey)
 
-            // 1. Pull remote state
             val getResp = executeRequest(endpoint, "GET", config.apiToken)
             if (getResp.code !in 200..299 && getResp.code != 404) {
                 return@withContext SyncResult(
@@ -312,7 +311,6 @@ object CloudSyncManager {
 
             val remote = parseRemotePayload(getResp)
 
-            // 2. Merge local + remote
             val (mergedTransactions, mergedDeleted, mergedBilling) = mergeData(
                 localTransactions = localTransactions,
                 localDeleted = localDeleted,
@@ -321,7 +319,6 @@ object CloudSyncManager {
                 nowMillis = nowMillis
             )
 
-            // 3. Push merged state back to Cloudflare Worker
             val deviceId = TransactionStorage.getOrCreateDeviceId(context)
             val bodyJson = buildUploadBody(
                 deviceId = deviceId,
@@ -340,7 +337,6 @@ object CloudSyncManager {
                 )
             }
 
-            // 4. Persist locally
             TransactionStorage.saveTransactions(context, mergedTransactions)
             TransactionStorage.saveDeletedTransactions(context, mergedDeleted)
             TransactionStorage.saveBillingConfig(context, mergedBilling)

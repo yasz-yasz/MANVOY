@@ -245,7 +245,6 @@ fun BillingPeriodSettingsDialog(
                     }
                 }
 
-                // Quick preset tanggal mulai
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -265,7 +264,6 @@ fun BillingPeriodSettingsDialog(
                     }
                 }
 
-                // Preview siklus billing
                 Surface(
                     color = SoftBg,
                     shape = RoundedCornerShape(10.dp),
@@ -297,7 +295,6 @@ fun BillingPeriodSettingsDialog(
 
                 HorizontalDivider(color = Color(0xFFE2E8F0))
 
-                // Jumlah riwayat periode
                 Text(
                     text = "Jumlah Riwayat Periode di Tab Bar",
                     fontWeight = FontWeight.SemiBold,
@@ -323,7 +320,6 @@ fun BillingPeriodSettingsDialog(
                     }
                 }
 
-                // Toggle tab Semua
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -354,7 +350,6 @@ fun BillingPeriodSettingsDialog(
 
                 HorizontalDivider(color = Color(0xFFE2E8F0))
 
-                // Periode Custom Manual
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,

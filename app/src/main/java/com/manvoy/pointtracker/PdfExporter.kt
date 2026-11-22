@@ -120,7 +120,6 @@ object PdfExporter {
             var page = pdfDocument.startPage(pageInfo)
             var canvas = page.canvas
 
-            // Header Banner
             canvas.drawRect(0f, 0f, PAGE_WIDTH.toFloat(), 88f, navyPaint)
             canvas.drawRect(0f, 88f, PAGE_WIDTH * 0.65f, 93f, goldPaint)
             canvas.drawRect(PAGE_WIDTH * 0.65f, 88f, PAGE_WIDTH.toFloat(), 93f, coralPaint)
@@ -129,7 +128,6 @@ object PdfExporter {
             canvas.drawText("Periode: ${truncateText(periodTitle, 52)}", MARGIN, 56f, subtitlePaint)
             canvas.drawText("Dicetak pada: $printDate WIB", MARGIN, 72f, subtitlePaint)
 
-            // Summary Box (2 baris metrik)
             val summaryRect = RectF(MARGIN, 108f, PAGE_WIDTH - MARGIN, 216f)
             canvas.drawRoundRect(summaryRect, 8f, 8f, cardBgPaint)
 
@@ -137,7 +135,6 @@ object PdfExporter {
             val col2 = MARGIN + 184f
             val col3 = MARGIN + 364f
 
-            // Baris 1: Transaksi, Nominal, Total Poin
             canvas.drawText("Total Transaksi", col1, 128f, labelPaint)
             canvas.drawText("${summary.transactionCount} Transaksi", col1, 148f, valuePaint)
 
@@ -147,10 +144,8 @@ object PdfExporter {
             canvas.drawText("Total Poin (Dasar + Bonus)", col3, 128f, labelPaint)
             canvas.drawText("${formatNumber(summary.totalPoints)} Poin", col3, 148f, valuePaint)
 
-            // Garis pemisah tipis dalam summary box
             canvas.drawLine(MARGIN + 14f, 162f, PAGE_WIDTH - MARGIN - 14f, 162f, dividerPaint)
 
-            // Baris 2: Bonus 30jt, Earning Rate Rp/Poin, Rata-rata Poin/20rb
             canvas.drawText("Bonus Target Rp30 Jt", col1, 180f, labelPaint)
             if (summary.isBonusUnlocked) {
                 canvas.drawText("+${formatNumber(summary.bonusPoints)} Poin (Tercapai)", col1, 200f, bonusPaint)

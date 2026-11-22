@@ -240,7 +240,7 @@ fun ManvoyTrackerScreen() {
     ) { uri ->
         if (uri != null) {
             val periodTitle = if (activeTab.isUnbilled) {
-                "Belum Tertagih (${activeTab.rangeLabel})"
+                "Belum Tertagih (\${activeTab.rangeLabel})"
             } else if (activeTab.isAll) {
                 "Semua Periode"
             } else {
@@ -333,7 +333,7 @@ fun ManvoyTrackerScreen() {
                                     val safePeriod = activeTab.label
                                         .replace(Regex("[^A-Za-z0-9]+"), "_")
                                         .trim('_')
-                                    pdfLauncher.launch("Manvoy_${safePeriod}_$stamp.pdf")
+                                    pdfLauncher.launch("Manvoy_\${safePeriod}_\$stamp.pdf")
                                 }
                             }
                         ) {
@@ -394,7 +394,7 @@ fun ManvoyTrackerScreen() {
                     FilterChip(
                         selected = selectedFilter == null,
                         onClick = { selectedFilter = null },
-                        label = { Text("Semua (${periodTransactions.size})") },
+                        label = { Text("Semua (\${periodTransactions.size})") },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MandiriNavy,
                             selectedLabelColor = Color.White
@@ -407,7 +407,7 @@ fun ManvoyTrackerScreen() {
                             onClick = {
                                 selectedFilter = if (selectedFilter == type) null else type
                             },
-                            label = { Text("${type.label} ($count)") },
+                            label = { Text("\${type.label} (\$count)") },
                             colors = FilterChipDefaults.filterChipColors(
                                 selectedContainerColor = MandiriNavy,
                                 selectedLabelColor = Color.White
@@ -426,8 +426,7 @@ fun ManvoyTrackerScreen() {
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Belum ada transaksi di periode ${activeTab.label}.
-Tekan tombol + untuk mencatat transaksi baru.",
+                            text = "Belum ada transaksi di periode \${activeTab.label}.\nTekan tombol + untuk mencatat transaksi baru.",
                             color = Color.Gray,
                             fontSize = 14.sp,
                             lineHeight = 20.sp
@@ -508,7 +507,7 @@ Tekan tombol + untuk mencatat transaksi baru.",
                 showBillingSettings = false
                 Toast.makeText(
                     context,
-                    "Periode billing diperbarui (mulai tanggal ${newConfig.startDay}).",
+                    "Periode billing diperbarui (mulai tanggal \${newConfig.startDay}).",
                     Toast.LENGTH_SHORT
                 ).show()
                 if (syncConfig.autoSyncEnabled && syncConfig.isConfigured) {
@@ -603,7 +602,7 @@ private fun SummaryCard(
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
                             text = if (activeTab.isUnbilled) {
-                                "Belum Tertagih • ${activeTab.rangeLabel}"
+                                "Belum Tertagih • \${activeTab.rangeLabel}"
                             } else {
                                 activeTab.rangeLabel
                             },
@@ -619,7 +618,7 @@ private fun SummaryCard(
                     shape = RoundedCornerShape(20.dp)
                 ) {
                     Text(
-                        text = "${summary.transactionCount} Transaksi",
+                        text = "\${summary.transactionCount} Transaksi",
                         color = MandiriNavy,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -658,7 +657,7 @@ private fun SummaryCard(
             }
 
             Text(
-                text = "Poin Dasar: ${formatNumber(summary.basePoints)}  •  Bonus 30Jt: +${formatNumber(summary.bonusPoints)}",
+                text = "Poin Dasar: \${formatNumber(summary.basePoints)}  •  Bonus 30Jt: +\${formatNumber(summary.bonusPoints)}",
                 color = Color(0xFFD6E4F5),
                 fontSize = 11.sp
             )
@@ -703,7 +702,7 @@ private fun SummaryCard(
                             text = if (summary.isBonusUnlocked) {
                                 "+2.500 Poin"
                             } else {
-                                "${(summary.bonusProgress * 100).toInt()}%"
+                                "\${(summary.bonusProgress * 100).toInt()}%"
                             },
                             color = if (summary.isBonusUnlocked) SuccessGreen else MandiriGold,
                             fontSize = 12.sp,
@@ -729,7 +728,7 @@ private fun SummaryCard(
                         text = if (summary.isBonusUnlocked) {
                             "Selamat! Bonus 2.500 poin otomatis ditambahkan ke total poin periode ini."
                         } else {
-                            "Kurang ${formatRupiah(summary.remainingForBonus)} lagi untuk bonus +2.500 poin"
+                            "Kurang \${formatRupiah(summary.remainingForBonus)} lagi untuk bonus +2.500 poin"
                         },
                         color = Color(0xFFD6E4F5),
                         fontSize = 10.5.sp
@@ -819,7 +818,7 @@ private fun TransactionCard(
                         shape = RoundedCornerShape(6.dp)
                     ) {
                         Text(
-                            text = "${item.type.label} (${item.type.pointsPer20k} pt/20rb)",
+                            text = "\${item.type.label} (\${item.type.pointsPer20k} pt/20rb)",
                             color = badgeColor,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
@@ -858,7 +857,7 @@ private fun TransactionCard(
                     shape = RoundedCornerShape(8.dp)
                 ) {
                     Text(
-                        text = "+${formatNumber(item.points)} Poin",
+                        text = "+\${formatNumber(item.points)} Poin",
                         color = if (item.points > 0) MandiriNavy else Color.Gray,
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 13.sp,
@@ -942,7 +941,7 @@ private fun AddOrEditTransactionDialog(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Tanggal: ${formatDateUtc(selectedDateMillis)}",
+                        text = "Tanggal: \${formatDateUtc(selectedDateMillis)}",
                         color = MandiriNavy,
                         modifier = Modifier.weight(1f)
                     )
@@ -969,7 +968,7 @@ private fun AddOrEditTransactionDialog(
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Text(
-                            text = "Jenis: ${selectedType.label} (${selectedType.pointsPer20k} poin/20rb)",
+                            text = "Jenis: \${selectedType.label} (\${selectedType.pointsPer20k} poin/20rb)",
                             color = MandiriNavy,
                             modifier = Modifier.weight(1f)
                         )
@@ -987,7 +986,7 @@ private fun AddOrEditTransactionDialog(
                         TransactionType.entries.forEach { type ->
                             DropdownMenuItem(
                                 text = {
-                                    Text("${type.label} (${type.pointsPer20k} poin / Rp20.000)")
+                                    Text("\${type.label} (\${type.pointsPer20k} poin / Rp20.000)")
                                 },
                                 onClick = {
                                     selectedType = type
@@ -1010,7 +1009,7 @@ private fun AddOrEditTransactionDialog(
                             color = Color.Gray
                         )
                         Text(
-                            text = "+${formatNumber(estimatedPoints)} Poin",
+                            text = "+\${formatNumber(estimatedPoints)} Poin",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.ExtraBold,
                             color = if (estimatedPoints > 0) MandiriNavy else BonvoyCoral
@@ -1019,7 +1018,7 @@ private fun AddOrEditTransactionDialog(
                             text = if (parsedAmount in 1..19_999L) {
                                 "Di bawah Rp20.000 belum mendapatkan poin"
                             } else {
-                                "Dihitung per kelipatan penuh Rp20.000 (${parsedAmount / POINT_MULTIPLE_AMOUNT}x kelipatan)"
+                                "Dihitung per kelipatan penuh Rp20.000 (\${parsedAmount / POINT_MULTIPLE_AMOUNT}x kelipatan)"
                             },
                             fontSize = 11.sp,
                             color = Color(0xFF5D6D7E)
