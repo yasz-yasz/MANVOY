@@ -426,8 +426,7 @@ fun ManvoyTrackerScreen() {
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Belum ada transaksi di periode ${activeTab.label}.
-Tekan tombol + untuk mencatat transaksi baru.",
+                            text = "Belum ada transaksi di periode ${activeTab.label}.\nTekan tombol + untuk mencatat transaksi baru.",
                             color = Color.Gray,
                             fontSize = 14.sp,
                             lineHeight = 20.sp
