@@ -7,6 +7,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -30,14 +31,20 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.CloudDone
+import androidx.compose.material.icons.filled.CloudOff
+import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.EmojiEvents
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.SyncProblem
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenu
@@ -62,10 +69,12 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -77,16 +86,20 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.UUID
 
-private val MandiriNavy = Color(0xFF002D5E)
-private val MandiriBlue = Color(0xFF004C97)
-private val MandiriGold = Color(0xFFF4B400)
-private val BonvoyCoral = Color(0xFFE87A5D)
-private val SuccessGreen = Color(0xFF2ECC71)
-private val SoftBg = Color(0xFFF4F6FA)
+internal val MandiriNavy = Color(0xFF002D5E)
+internal val MandiriBlue = Color(0xFF004C97)
+internal val TabIndicatorBlue = Color(0xFF007AFF)
+internal val MandiriGold = Color(0xFFF4B400)
+internal val BonvoyCoral = Color(0xFFE87A5D)
+internal val SuccessGreen = Color(0xFF2ECC71)
+internal val SoftBg = Color(0xFFF4F6FA)
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -111,24 +124,129 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ManvoyTrackerScreen() {
     val context = LocalContext.current
-    var transactions by remember { mutableStateOf(TransactionStorage.loadTransactions(context)) }
-    var selectedFilter by remember { mutableStateOf<TransactionType?>(null) }
-    var showAddDialog by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-    val filteredTransactions = remember(transactions, selectedFilter) {
-        if (selectedFilter == null) transactions
-        else transactions.filter { it.type == selectedFilter }
+    var transactions by remember { mutableStateOf(TransactionStorage.loadTransactions(context)) }
+    var deletedIds by remember { mutableStateOf(TransactionStorage.loadDeletedTransactions(context)) }
+    var billingConfig by remember { mutableStateOf(TransactionStorage.loadBillingConfig(context)) }
+    var syncConfig by remember { mutableStateOf(TransactionStorage.loadSyncConfig(context)) }
+    var syncState by remember {
+        mutableStateOf(if (syncConfig.lastSyncAt > 0L) SyncState.SUCCESS else SyncState.IDLE)
     }
 
-    val overallSummary = remember(transactions) {
-        calculatePointsSummary(transactions)
+    var selectedTabId by remember { mutableStateOf(TAB_ID_UNBILLED) }
+    var selectedFilter by remember { mutableStateOf<TransactionType?>(null) }
+
+    var showAddDialog by remember { mutableStateOf(false) }
+    var editingTransaction by remember { mutableStateOf<TransactionItem?>(null) }
+    var showBillingSettings by remember { mutableStateOf(false) }
+    var showSyncDialog by remember { mutableStateOf(false) }
+
+    val periodTabs = remember(billingConfig, transactions) {
+        buildBillingPeriodTabs(billingConfig, transactions)
+    }
+
+    val activeTab = remember(periodTabs, selectedTabId) {
+        periodTabs.firstOrNull { it.id == selectedTabId }
+            ?: periodTabs.firstOrNull { it.id == TAB_ID_UNBILLED }
+            ?: periodTabs.first()
+    }
+
+    LaunchedEffect(activeTab.id) {
+        if (selectedTabId != activeTab.id) {
+            selectedTabId = activeTab.id
+        }
+    }
+
+    val periodTransactions = remember(transactions, activeTab) {
+        filterTransactionsByPeriod(transactions, activeTab)
+    }
+
+    val filteredTransactions = remember(periodTransactions, selectedFilter) {
+        if (selectedFilter == null) periodTransactions
+        else periodTransactions.filter { it.type == selectedFilter }
+    }
+
+    val periodSummary = remember(periodTransactions) {
+        calculatePointsSummary(periodTransactions)
+    }
+
+    fun applySyncResult(result: SyncResult, activeCfg: CloudSyncConfig, showToast: Boolean) {
+        if (result.success) {
+            result.transactions?.let { transactions = it }
+            result.deletedIds?.let { deletedIds = it }
+            result.billingConfig?.let { billingConfig = it }
+            val updatedCfg = activeCfg.copy(
+                lastSyncAt = result.syncedAt,
+                lastSyncMessage = result.message
+            )
+            syncConfig = updatedCfg
+            TransactionStorage.saveSyncConfig(context, updatedCfg)
+            syncState = SyncState.SUCCESS
+        } else {
+            val updatedCfg = activeCfg.copy(lastSyncMessage = result.message)
+            syncConfig = updatedCfg
+            TransactionStorage.saveSyncConfig(context, updatedCfg)
+            syncState = SyncState.ERROR
+        }
+        if (showToast) {
+            Toast.makeText(context, result.message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun runTwoWaySync(
+        cfg: CloudSyncConfig = syncConfig,
+        txList: List<TransactionItem> = transactions,
+        delMap: Map<String, Long> = deletedIds,
+        billCfg: BillingConfig = billingConfig,
+        showToast: Boolean = false
+    ) {
+        if (!cfg.isConfigured || syncState == SyncState.SYNCING) return
+        scope.launch {
+            syncState = SyncState.SYNCING
+            val result = CloudSyncManager.syncTwoWay(
+                context = context,
+                config = cfg,
+                localTransactions = txList,
+                localDeleted = delMap,
+                localBillingConfig = billCfg
+            )
+            applySyncResult(result, cfg, showToast)
+        }
+    }
+
+    LaunchedEffect(
+        syncConfig.autoSyncEnabled,
+        syncConfig.workerUrl,
+        syncConfig.apiToken,
+        syncConfig.syncKey,
+        syncConfig.autoSyncIntervalMinutes
+    ) {
+        if (syncConfig.autoSyncEnabled && syncConfig.isConfigured) {
+            runTwoWaySync(showToast = false)
+            if (syncConfig.autoSyncIntervalMinutes > 0) {
+                while (true) {
+                    delay(syncConfig.autoSyncIntervalMinutes * 60_000L)
+                    if (syncConfig.autoSyncEnabled && syncConfig.isConfigured) {
+                        runTwoWaySync(showToast = false)
+                    }
+                }
+            }
+        }
     }
 
     val pdfLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/pdf")
     ) { uri ->
         if (uri != null) {
-            val ok = PdfExporter.exportToPdf(context, uri, filteredTransactions)
+            val periodTitle = if (activeTab.isUnbilled) {
+                "Belum Tertagih (${activeTab.rangeLabel})"
+            } else if (activeTab.isAll) {
+                "Semua Periode"
+            } else {
+                activeTab.rangeLabel
+            }
+            val ok = PdfExporter.exportToPdf(context, uri, filteredTransactions, periodTitle)
             Toast.makeText(
                 context,
                 if (ok) "PDF berhasil diekspor!" else "Gagal mengekspor PDF.",
@@ -140,52 +258,109 @@ fun ManvoyTrackerScreen() {
     Scaffold(
         containerColor = SoftBg,
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "Tracker Poin Manvoy",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 18.sp
-                        )
-                        Text(
-                            text = "Mandiri × Marriott Bonvoy",
-                            fontSize = 11.sp,
-                            color = Color(0xFFD0E2F5)
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MandiriNavy,
-                    titleContentColor = Color.White,
-                    actionIconContentColor = Color.White
-                ),
-                actions = {
-                    IconButton(
-                        onClick = {
-                            if (filteredTransactions.isEmpty()) {
-                                Toast.makeText(
-                                    context,
-                                    "Belum ada transaksi untuk diekspor",
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            } else {
-                                val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
-                                pdfLauncher.launch("Tracker_Poin_Manvoy_$stamp.pdf")
+            Column {
+                TopAppBar(
+                    title = {
+                        Column {
+                            Text(
+                                text = "Tracker Poin Manvoy",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp
+                            )
+                            Text(
+                                text = "Mandiri × Marriott Bonvoy",
+                                fontSize = 11.sp,
+                                color = Color(0xFFD0E2F5)
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MandiriNavy,
+                        titleContentColor = Color.White,
+                        actionIconContentColor = Color.White
+                    ),
+                    actions = {
+                        IconButton(onClick = { showSyncDialog = true }) {
+                            when {
+                                syncState == SyncState.SYNCING -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                        color = MandiriGold
+                                    )
+                                }
+                                !syncConfig.isConfigured -> {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudOff,
+                                        contentDescription = "Sinkronisasi Cloud",
+                                        tint = Color(0xFFBBD6F2)
+                                    )
+                                }
+                                syncState == SyncState.ERROR -> {
+                                    Icon(
+                                        imageVector = Icons.Default.SyncProblem,
+                                        contentDescription = "Sinkronisasi Gagal",
+                                        tint = BonvoyCoral
+                                    )
+                                }
+                                syncState == SyncState.SUCCESS -> {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudDone,
+                                        contentDescription = "Tersinkronisasi",
+                                        tint = SuccessGreen
+                                    )
+                                }
+                                else -> {
+                                    Icon(
+                                        imageVector = Icons.Default.CloudSync,
+                                        contentDescription = "Sinkronisasi Cloud",
+                                        tint = Color.White
+                                    )
+                                }
                             }
                         }
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.PictureAsPdf,
-                            contentDescription = "Ekspor PDF"
-                        )
+
+                        IconButton(
+                            onClick = {
+                                if (filteredTransactions.isEmpty()) {
+                                    Toast.makeText(
+                                        context,
+                                        "Belum ada transaksi di periode ini untuk diekspor",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    val stamp = SimpleDateFormat("yyyyMMdd_HHmm", Locale.US).format(Date())
+                                    val safePeriod = activeTab.label
+                                        .replace(Regex("[^A-Za-z0-9]+"), "_")
+                                        .trim('_')
+                                    pdfLauncher.launch("Manvoy_${safePeriod}_$stamp.pdf")
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PictureAsPdf,
+                                contentDescription = "Ekspor PDF"
+                            )
+                        }
                     }
-                }
-            )
+                )
+
+                BillingPeriodTabBar(
+                    tabs = periodTabs,
+                    selectedTabId = activeTab.id,
+                    onSelectTab = { newId ->
+                        selectedTabId = newId
+                    },
+                    onOpenSettings = { showBillingSettings = true }
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showAddDialog = true },
+                onClick = {
+                    editingTransaction = null
+                    showAddDialog = true
+                },
                 containerColor = BonvoyCoral,
                 contentColor = Color.White
             ) {
@@ -201,7 +376,11 @@ fun ManvoyTrackerScreen() {
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item(key = "summary_card") {
-                SummaryCard(summary = overallSummary)
+                SummaryCard(
+                    summary = periodSummary,
+                    activeTab = activeTab,
+                    onClickPeriodSettings = { showBillingSettings = true }
+                )
             }
 
             item(key = "filter_chips") {
@@ -215,14 +394,14 @@ fun ManvoyTrackerScreen() {
                     FilterChip(
                         selected = selectedFilter == null,
                         onClick = { selectedFilter = null },
-                        label = { Text("Semua (${transactions.size})") },
+                        label = { Text("Semua (${periodTransactions.size})") },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MandiriNavy,
                             selectedLabelColor = Color.White
                         )
                     )
                     TransactionType.entries.forEach { type ->
-                        val count = transactions.count { it.type == type }
+                        val count = periodTransactions.count { it.type == type }
                         FilterChip(
                             selected = selectedFilter == type,
                             onClick = {
@@ -247,7 +426,8 @@ fun ManvoyTrackerScreen() {
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Belum ada transaksi.\nTekan tombol + untuk mencatat transaksi baru.",
+                            text = "Belum ada transaksi di periode ${activeTab.label}.
+Tekan tombol + untuk mencatat transaksi baru.",
                             color = Color.Gray,
                             fontSize = 14.sp,
                             lineHeight = 20.sp
@@ -259,10 +439,25 @@ fun ManvoyTrackerScreen() {
                     Box(modifier = Modifier.padding(horizontal = 16.dp)) {
                         TransactionCard(
                             item = item,
+                            onEdit = {
+                                editingTransaction = item
+                                showAddDialog = true
+                            },
                             onDelete = {
+                                val now = System.currentTimeMillis()
                                 val updated = transactions.filterNot { it.id == item.id }
+                                val updatedDeleted = deletedIds + (item.id to now)
                                 transactions = updated
+                                deletedIds = updatedDeleted
                                 TransactionStorage.saveTransactions(context, updated)
+                                TransactionStorage.saveDeletedTransactions(context, updatedDeleted)
+                                if (syncConfig.autoSyncEnabled && syncConfig.isConfigured) {
+                                    runTwoWaySync(
+                                        txList = updated,
+                                        delMap = updatedDeleted,
+                                        showToast = false
+                                    )
+                                }
                             }
                         )
                     }
@@ -272,24 +467,108 @@ fun ManvoyTrackerScreen() {
     }
 
     if (showAddDialog) {
-        AddTransactionDialog(
-            onDismiss = { showAddDialog = false },
-            onSave = { newItem ->
-                val updated = (listOf(newItem) + transactions).sortedByDescending { it.dateMillis }
-                transactions = updated
-                TransactionStorage.saveTransactions(context, updated)
+        AddOrEditTransactionDialog(
+            initialItem = editingTransaction,
+            defaultDateMillis = defaultDateMillisForTab(activeTab),
+            onDismiss = {
                 showAddDialog = false
+                editingTransaction = null
+            },
+            onSave = { savedItem ->
+                val updated = (listOf(savedItem) + transactions.filterNot { it.id == savedItem.id })
+                    .sortedWith(
+                        compareByDescending<TransactionItem> { it.dateMillis }
+                            .thenByDescending { it.updatedAt }
+                    )
+                val updatedDeleted = deletedIds - savedItem.id
+                transactions = updated
+                deletedIds = updatedDeleted
+                TransactionStorage.saveTransactions(context, updated)
+                TransactionStorage.saveDeletedTransactions(context, updatedDeleted)
+                showAddDialog = false
+                editingTransaction = null
+                if (syncConfig.autoSyncEnabled && syncConfig.isConfigured) {
+                    runTwoWaySync(
+                        txList = updated,
+                        delMap = updatedDeleted,
+                        showToast = false
+                    )
+                }
+            }
+        )
+    }
+
+    if (showBillingSettings) {
+        BillingPeriodSettingsDialog(
+            currentConfig = billingConfig,
+            onDismiss = { showBillingSettings = false },
+            onSave = { newConfig ->
+                billingConfig = newConfig
+                TransactionStorage.saveBillingConfig(context, newConfig)
+                showBillingSettings = false
+                Toast.makeText(
+                    context,
+                    "Periode billing diperbarui (mulai tanggal ${newConfig.startDay}).",
+                    Toast.LENGTH_SHORT
+                ).show()
+                if (syncConfig.autoSyncEnabled && syncConfig.isConfigured) {
+                    runTwoWaySync(billCfg = newConfig, showToast = false)
+                }
+            }
+        )
+    }
+
+    if (showSyncDialog) {
+        CloudSyncDialog(
+            currentConfig = syncConfig,
+            syncState = syncState,
+            onDismiss = { showSyncDialog = false },
+            onSaveConfig = { updatedCfg ->
+                syncConfig = updatedCfg
+                TransactionStorage.saveSyncConfig(context, updatedCfg)
+            },
+            onSyncNow = { cfg ->
+                runTwoWaySync(cfg = cfg, showToast = true)
+            },
+            onForcePush = { cfg ->
+                if (!cfg.isConfigured || syncState == SyncState.SYNCING) return@CloudSyncDialog
+                scope.launch {
+                    syncState = SyncState.SYNCING
+                    val result = CloudSyncManager.pushOverwrite(
+                        context = context,
+                        config = cfg,
+                        localTransactions = transactions,
+                        localDeleted = deletedIds,
+                        localBillingConfig = billingConfig
+                    )
+                    applySyncResult(result, cfg, showToast = true)
+                }
+            },
+            onForcePull = { cfg ->
+                if (!cfg.isConfigured || syncState == SyncState.SYNCING) return@CloudSyncDialog
+                scope.launch {
+                    syncState = SyncState.SYNCING
+                    val result = CloudSyncManager.pullOverwrite(
+                        context = context,
+                        config = cfg
+                    )
+                    applySyncResult(result, cfg, showToast = true)
+                }
             }
         )
     }
 }
 
 @Composable
-private fun SummaryCard(summary: PointsSummary) {
+private fun SummaryCard(
+    summary: PointsSummary,
+    activeTab: BillingPeriodTab,
+    onClickPeriodSettings: () -> Unit
+) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 4.dp)
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp)
             .clip(RoundedCornerShape(18.dp))
             .background(
                 Brush.linearGradient(
@@ -304,13 +583,37 @@ private fun SummaryCard(summary: PointsSummary) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = "TOTAL PEROLEHAN POIN",
-                    color = Color(0xFFBBD6F2),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    letterSpacing = 0.8.sp
-                )
+                Surface(
+                    color = Color.White.copy(alpha = 0.14f),
+                    shape = RoundedCornerShape(20.dp),
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable(onClick = onClickPeriodSettings)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DateRange,
+                            contentDescription = null,
+                            tint = MandiriGold,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Spacer(modifier = Modifier.width(5.dp))
+                        Text(
+                            text = if (activeTab.isUnbilled) {
+                                "Belum Tertagih • ${activeTab.rangeLabel}"
+                            } else {
+                                activeTab.rangeLabel
+                            },
+                            color = Color.White,
+                            fontSize = 10.5.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
                 Surface(
                     color = MandiriGold,
                     shape = RoundedCornerShape(20.dp)
@@ -325,7 +628,17 @@ private fun SummaryCard(summary: PointsSummary) {
                 }
             }
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(10.dp))
+
+            Text(
+                text = "TOTAL PEROLEHAN POIN",
+                color = Color(0xFFBBD6F2),
+                fontSize = 10.5.sp,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 0.8.sp
+            )
+
+            Spacer(modifier = Modifier.height(2.dp))
 
             Row(verticalAlignment = Alignment.Bottom) {
                 Text(
@@ -352,7 +665,6 @@ private fun SummaryCard(summary: PointsSummary) {
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Box Progress Bonus Target Rp30 Juta
             Surface(
                 color = Color.White.copy(alpha = 0.11f),
                 shape = RoundedCornerShape(12.dp),
@@ -415,7 +727,7 @@ private fun SummaryCard(summary: PointsSummary) {
 
                     Text(
                         text = if (summary.isBonusUnlocked) {
-                            "Selamat! Bonus 2.500 poin otomatis ditambahkan ke total poin."
+                            "Selamat! Bonus 2.500 poin otomatis ditambahkan ke total poin periode ini."
                         } else {
                             "Kurang ${formatRupiah(summary.remainingForBonus)} lagi untuk bonus +2.500 poin"
                         },
@@ -429,7 +741,6 @@ private fun SummaryCard(summary: PointsSummary) {
             HorizontalDivider(color = Color.White.copy(alpha = 0.2f))
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Total Nominal & Rata-rata Earning Rate
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -476,6 +787,7 @@ private fun SummaryCard(summary: PointsSummary) {
 @Composable
 private fun TransactionCard(
     item: TransactionItem,
+    onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
     val badgeColor = when (item.type) {
@@ -486,7 +798,10 @@ private fun TransactionCard(
     }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onEdit),
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color.White),
         elevation = CardDefaults.cardElevation(defaultElevation = 1.5.dp)
@@ -571,14 +886,19 @@ private fun TransactionCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun AddTransactionDialog(
+private fun AddOrEditTransactionDialog(
+    initialItem: TransactionItem?,
+    defaultDateMillis: Long,
     onDismiss: () -> Unit,
     onSave: (TransactionItem) -> Unit
 ) {
-    var name by remember { mutableStateOf("") }
-    var amountText by remember { mutableStateOf("") }
-    var selectedDateMillis by remember { mutableLongStateOf(todayUtcMillis()) }
-    var selectedType by remember { mutableStateOf(TransactionType.REGULER) }
+    val isEdit = initialItem != null
+    var name by remember { mutableStateOf(initialItem?.name ?: "") }
+    var amountText by remember { mutableStateOf(initialItem?.amount?.toString() ?: "") }
+    var selectedDateMillis by remember {
+        mutableLongStateOf(initialItem?.dateMillis ?: defaultDateMillis)
+    }
+    var selectedType by remember { mutableStateOf(initialItem?.type ?: TransactionType.REGULER) }
 
     var showDatePicker by remember { mutableStateOf(false) }
     var showTypeDropdown by remember { mutableStateOf(false) }
@@ -591,7 +911,7 @@ private fun AddTransactionDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = "Tambah Transaksi",
+                text = if (isEdit) "Edit Transaksi" else "Tambah Transaksi",
                 fontWeight = FontWeight.Bold,
                 color = MandiriNavy
             )
@@ -730,16 +1050,18 @@ private fun AddTransactionDialog(
                     }
                     onSave(
                         TransactionItem(
+                            id = initialItem?.id ?: UUID.randomUUID().toString(),
                             name = trimmedName,
                             dateMillis = selectedDateMillis,
                             amount = parsedAmount,
-                            type = selectedType
+                            type = selectedType,
+                            updatedAt = System.currentTimeMillis()
                         )
                     )
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = MandiriNavy)
             ) {
-                Text("Simpan")
+                Text(if (isEdit) "Perbarui" else "Simpan")
             }
         },
         dismissButton = {

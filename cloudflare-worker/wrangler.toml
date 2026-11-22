@@ -1,0 +1,9 @@
+name = "manvoy-point-sync"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# Ganti id di bawah ini dengan KV Namespace ID dari akun Cloudflare Anda
+# Buat KV dengan perintah: npx wrangler kv namespace create MANVOY_KV
+[[kv_namespaces]]
+binding = "MANVOY_KV"
+id = "GANTI_DENGAN_KV_NAMESPACE_ID_ANDA"

@@ -21,7 +21,8 @@ object PdfExporter {
     fun exportToPdf(
         context: Context,
         uri: Uri,
-        transactions: List<TransactionItem>
+        transactions: List<TransactionItem>,
+        periodTitle: String = "Semua Periode"
     ): Boolean {
         val pdfDocument = PdfDocument()
 
@@ -120,15 +121,16 @@ object PdfExporter {
             var canvas = page.canvas
 
             // Header Banner
-            canvas.drawRect(0f, 0f, PAGE_WIDTH.toFloat(), 84f, navyPaint)
-            canvas.drawRect(0f, 84f, PAGE_WIDTH * 0.65f, 89f, goldPaint)
-            canvas.drawRect(PAGE_WIDTH * 0.65f, 84f, PAGE_WIDTH.toFloat(), 89f, coralPaint)
+            canvas.drawRect(0f, 0f, PAGE_WIDTH.toFloat(), 88f, navyPaint)
+            canvas.drawRect(0f, 88f, PAGE_WIDTH * 0.65f, 93f, goldPaint)
+            canvas.drawRect(PAGE_WIDTH * 0.65f, 88f, PAGE_WIDTH.toFloat(), 93f, coralPaint)
 
-            canvas.drawText("LAPORAN TRACKER POIN MANVOY", MARGIN, 40f, titlePaint)
-            canvas.drawText("Dicetak pada: $printDate WIB", MARGIN, 60f, subtitlePaint)
+            canvas.drawText("LAPORAN TRACKER POIN MANVOY", MARGIN, 36f, titlePaint)
+            canvas.drawText("Periode: ${truncateText(periodTitle, 52)}", MARGIN, 56f, subtitlePaint)
+            canvas.drawText("Dicetak pada: $printDate WIB", MARGIN, 72f, subtitlePaint)
 
             // Summary Box (2 baris metrik)
-            val summaryRect = RectF(MARGIN, 104f, PAGE_WIDTH - MARGIN, 212f)
+            val summaryRect = RectF(MARGIN, 108f, PAGE_WIDTH - MARGIN, 216f)
             canvas.drawRoundRect(summaryRect, 8f, 8f, cardBgPaint)
 
             val col1 = MARGIN + 16f
@@ -136,37 +138,37 @@ object PdfExporter {
             val col3 = MARGIN + 364f
 
             // Baris 1: Transaksi, Nominal, Total Poin
-            canvas.drawText("Total Transaksi", col1, 124f, labelPaint)
-            canvas.drawText("${summary.transactionCount} Transaksi", col1, 144f, valuePaint)
+            canvas.drawText("Total Transaksi", col1, 128f, labelPaint)
+            canvas.drawText("${summary.transactionCount} Transaksi", col1, 148f, valuePaint)
 
-            canvas.drawText("Total Nominal", col2, 124f, labelPaint)
-            canvas.drawText(formatRupiah(summary.totalAmount), col2, 144f, valuePaint)
+            canvas.drawText("Total Nominal", col2, 128f, labelPaint)
+            canvas.drawText(formatRupiah(summary.totalAmount), col2, 148f, valuePaint)
 
-            canvas.drawText("Total Poin (Dasar + Bonus)", col3, 124f, labelPaint)
-            canvas.drawText("${formatNumber(summary.totalPoints)} Poin", col3, 144f, valuePaint)
+            canvas.drawText("Total Poin (Dasar + Bonus)", col3, 128f, labelPaint)
+            canvas.drawText("${formatNumber(summary.totalPoints)} Poin", col3, 148f, valuePaint)
 
             // Garis pemisah tipis dalam summary box
-            canvas.drawLine(MARGIN + 14f, 158f, PAGE_WIDTH - MARGIN - 14f, 158f, dividerPaint)
+            canvas.drawLine(MARGIN + 14f, 162f, PAGE_WIDTH - MARGIN - 14f, 162f, dividerPaint)
 
             // Baris 2: Bonus 30jt, Earning Rate Rp/Poin, Rata-rata Poin/20rb
-            canvas.drawText("Bonus Target Rp30 Jt", col1, 176f, labelPaint)
+            canvas.drawText("Bonus Target Rp30 Jt", col1, 180f, labelPaint)
             if (summary.isBonusUnlocked) {
-                canvas.drawText("+${formatNumber(summary.bonusPoints)} Poin (Tercapai)", col1, 196f, bonusPaint)
+                canvas.drawText("+${formatNumber(summary.bonusPoints)} Poin (Tercapai)", col1, 200f, bonusPaint)
             } else {
-                canvas.drawText("0 Poin (Kurang ${formatRupiah(summary.remainingForBonus)})", col1, 196f, cellTextPaint)
+                canvas.drawText("0 Poin (Kurang ${formatRupiah(summary.remainingForBonus)})", col1, 200f, cellTextPaint)
             }
 
-            canvas.drawText("Earning Rate (Rp/Poin)", col2, 176f, labelPaint)
-            canvas.drawText(formatRupiahPerPoint(summary.rupiahPerPoint), col2, 196f, valuePaint)
+            canvas.drawText("Earning Rate (Rp/Poin)", col2, 180f, labelPaint)
+            canvas.drawText(formatRupiahPerPoint(summary.rupiahPerPoint), col2, 200f, valuePaint)
 
-            canvas.drawText("Rata-rata per Rp20rb", col3, 176f, labelPaint)
-            canvas.drawText(formatPointsPer20k(summary.pointsPer20k), col3, 196f, valuePaint)
+            canvas.drawText("Rata-rata per Rp20rb", col3, 180f, labelPaint)
+            canvas.drawText(formatPointsPer20k(summary.pointsPer20k), col3, 200f, valuePaint)
 
-            var currentY = drawTableHeader(canvas, 228f)
+            var currentY = drawTableHeader(canvas, 232f)
 
             if (transactions.isEmpty()) {
                 canvas.drawText(
-                    "Belum ada data transaksi tercatat.",
+                    "Belum ada data transaksi tercatat pada periode ini.",
                     MARGIN + 8f,
                     currentY + 24f,
                     cellTextPaint
