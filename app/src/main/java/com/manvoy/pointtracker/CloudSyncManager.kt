@@ -131,8 +131,8 @@ object CloudSyncManager {
 
         return when (code) {
             401, 403 -> "Token tidak valid (HTTP $code). Periksa Secret Token."
-            404 -> "Endpoint tidak ditemukan (HTTP 404). Periksa URL Cloudflare Worker."
-            413 -> "Ukuran data terlalu besar (HTTP 413)."
+            404 -> "Endpoint tidak ditemukan (HTTP $code). Periksa URL Cloudflare Worker."
+            413 -> "Ukuran data terlalu besar (HTTP $code)."
             in 500..599 -> {
                 if (serverMsg.isNotBlank()) "Error Worker (HTTP $code): $serverMsg"
                 else "Error server Cloudflare Worker (HTTP $code). Cek binding KV & secret."
